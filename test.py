@@ -5,10 +5,12 @@ from model import CNNModel
 import matplotlib.pyplot as plt
 import numpy as np
 import librosa
-from utils import SAVE_PATH, MODEL_PATH, SR, CHUNK_LEN, to_mel_spectrogram, normalize_mel, split_audio, statistic_labels, device
+from utils import *
 
-def test_model():
+def test_on_unmarked():
     _, _, unique_labels = statistic_labels() #Get the paths and labels of the audio files
+    label2idx = get_label2idx(unique_labels) #Get the label to index mapping
+    label_list = [label2idx[str(i)] for i in range(len(label2idx))]
 
     #Initialize and load model, this code will favor using the newly trained model but if not detected it will use the pretrained option
     model = CNNModel(num_classes=len(unique_labels)).to(device)
@@ -22,18 +24,16 @@ def test_model():
     else:
         raise FileNotFoundError("❌ No model file found at either SAVE_PATH or MODEL_PATH.")
 
-    from sklearn.metrics import accuracy_score, classification_report
-
     model.eval()
-    val_preds = []
-    val_true = []
 
-    for path, label_idx in tqdm(zip(val_paths, val_labels), desc="Predicting 20% validation set", total=len(val_paths)):
+    test_paths = get_file_paths(TEST_PATH)  #Get the paths of the test audio files
+
+    prob_sheet = []
+    for path in tqdm(test_paths, desc="Predicting 20% validation set", total=len(test_paths)):
         #Load audio
         audio, _ = librosa.load(path, sr=SR)
+        audio_name = os.path.basename(path).replace('.ogg', '')
         chunks = split_audio(audio)
-
-        chunk_probs = []
 
         for i, chunk in enumerate(chunks):
             if len(chunk) < CHUNK_LEN * SR:
@@ -46,44 +46,9 @@ def test_model():
             with torch.no_grad():
                 logits = model(mel_tensor)
                 probs = torch.softmax(logits, dim=1).cpu().numpy().flatten()
-                chunk_probs.append(probs)
+                chunk_time = (i + 1) * CHUNK_LEN
+                chunk_name = f"{audio_name}_{chunk_time}"
+                prob_sheet.append([chunk_name] + probs.tolist())
 
-        #Aggregate across chunks (e.g. mean of softmax probabilities)
-        avg_probs = np.mean(chunk_probs, axis=0)
-        pred_idx = int(np.argmax(avg_probs))
-
-        val_preds.append(pred_idx)
-        val_true.append(label_idx)
-
-    #Evaluation metrics
-    acc = accuracy_score(val_true, val_preds)
-    print(f"\n✅ Validation accuracy: {acc:.4f}\n")
-
-    labels_present = sorted(set(val_true) | set(val_preds))
-    print("Classification Report:")
-    print(classification_report(
-        val_true,
-        val_preds,
-        labels=labels_present,
-        target_names=[unique_labels[i] for i in labels_present],
-        zero_division=0
-    ))
-
-    ##Additional output
-    from collections import Counter
-
-    train_dist = Counter(train_labels)
-    val_dist = Counter(val_labels)
-
-    print(f"Train classes: {len(train_dist)}")
-    print(f"Val classes:   {len(val_dist)}")
-
-    #Visualization
-    plt.figure(figsize=(10, 4))
-    plt.hist(train_dist.values(), bins=50, alpha=0.6, label='Train')
-    plt.hist(val_dist.values(), bins=50, alpha=0.6, label='Validation')
-    plt.legend()
-    plt.title("")
-    plt.xlabel("Number of samples per class")
-    plt.ylabel("Number of classes")
-    plt.show()
+    sample_df = pd.read_csv(SAMPLE_CSV)
+    compare_and_rearrange_final_csv(prob_sheet, label_list, sample_df)

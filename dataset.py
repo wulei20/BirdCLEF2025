@@ -3,7 +3,6 @@ import numpy as np
 import librosa
 import torch
 from torch.utils.data import Dataset
-from sklearn.metrics import accuracy_score, classification_report
 from utils import split_audio, to_mel_spectrogram, normalize_mel, SR, CHUNK_LEN
 
 #Stores filepaths and labels inside BirdclefDataset object
