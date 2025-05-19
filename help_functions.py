@@ -13,10 +13,12 @@ BATCH_SIZE = 32 #Choose batch size
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') #Define when to use gpu or cpu
 SAVE_PATH = '../working/birdclef_cnn.pth' #Newly trained model
 MODEL_PATH = '../working/birdclef_cnnstratified.pth' #Pretrained option
-TEST_PATH = '../data/train_soundscapes/' #Test audio files
+TEST_PATH = '../data/test_soundscapes/' #Test audio files
 LABLE2IDX_FILE_PATH = '../working/label2idx.csv' #Label to index mapping
 OUTPUT_CSV = '../working/submission.csv' #Output csv file
 SAMPLE_CSV = '../data/sample_submission.csv' #Sample csv file for the test set
+TRAIN_CSV = '../data/train.csv' #Train csv file
+TRAIN_AUDIO = '../data/train_audio/' #Train audio files
 
 ###Helper functions
 #Split audio in 5 seconds function

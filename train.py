@@ -1,10 +1,10 @@
 import os
-from utils import *
+from help_functions import *
 from dataset import BirdclefDataset
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from model import CNNModel
+from model import CNNModel, BirdNet
 import numpy as np
 import torch.nn as nn
 import torch.optim as optim
@@ -12,49 +12,63 @@ import torch
 import librosa
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, classification_report
+from torch.utils.data import DataLoader, random_split
+
+#def prepare_dataset():
+#    ogg_paths, labels, unique_labels = statistic_labels() #Get the paths and labels of the audio files
+#
+#    label2idx = get_label2idx(unique_labels) #Get the label to index mapping
+#    # idx2label = {idx: label for label, idx in label2idx.items()}
+#    labels_idx = [label2idx[label] for label in labels]
+#
+#    #Print label order (later used for the actual submission script)
+#    print("✅ unique_labels (label → index mapping):")
+#    for i, label in enumerate(unique_labels):
+#        print(f"{i}: {label}")
+#
+#    full_dataset = BirdclefDataset(ogg_paths, labels_idx)
+#
+#    #80% training and 20% validation set splitting
+#    train_paths, val_paths, train_labels, val_labels = train_test_split(
+#        ogg_paths,
+#        labels_idx,
+#        test_size=0.2,
+#        stratify=labels_idx,
+#        random_state=42
+#    )
+#
+#    #Create the datasets from created split
+#    train_dataset = BirdclefDataset(train_paths, train_labels)
+#    val_dataset   = BirdclefDataset(val_paths, val_labels)
+#
+#    ###This is the code for non-stratified splitting
+#    #train_size = int(0.8 * len(full_dataset))
+#    #val_size   = len(full_dataset) - train_size
+#    #train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+#
+#    #These data loaders below will be used later during training to feed batches into the model and to evaluate the performance during training
+#    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
+#    val_loader   = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
+#    print(f"✅ {len(train_loader.dataset)} training samples")
+#    print(f"✅ {len(val_loader.dataset)} validation samples")
+#    return train_loader, val_loader, unique_labels, train_labels, val_labels
 
 def prepare_dataset():
-    ogg_paths, labels, unique_labels = statistic_labels() #Get the paths and labels of the audio files
-
-    label2idx = get_label2idx(unique_labels) #Get the label to index mapping
-    # idx2label = {idx: label for label, idx in label2idx.items()}
-    labels_idx = [label2idx[label] for label in labels]
-
-    #Print label order (later used for the actual submission script)
-    print("✅ unique_labels (label → index mapping):")
-    for i, label in enumerate(unique_labels):
-        print(f"{i}: {label}")
-
-    full_dataset = BirdclefDataset(ogg_paths, labels_idx)
-
-    #80% training and 20% validation set splitting
-    train_paths, val_paths, train_labels, val_labels = train_test_split(
-        ogg_paths,
-        labels_idx,
-        test_size=0.2,
-        stratify=labels_idx,
-        random_state=42
-    )
-
-    #Create the datasets from created split
-    train_dataset = BirdclefDataset(train_paths, train_labels)
-    val_dataset   = BirdclefDataset(val_paths, val_labels)
-
-    ###This is the code for non-stratified splitting
-    #train_size = int(0.8 * len(full_dataset))
-    #val_size   = len(full_dataset) - train_size
-    #train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
-
-    #These data loaders below will be used later during training to feed batches into the model and to evaluate the performance during training
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
-    val_loader   = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
-    print(f"✅ {len(train_loader.dataset)} training samples")
-    print(f"✅ {len(val_loader.dataset)} validation samples")
-    return train_loader, val_loader, unique_labels, train_labels, val_labels
+    ds = BirdclefDataset()
+    train_ds, val_ds = random_split(ds, [0.9, 0.1])
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
+    val_loader   = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
+    unique_len = ds.__len_of_label__()
+    train_len = len(train_loader.dataset)
+    val_len = len(val_loader.dataset)
+    return train_loader, val_loader, unique_len, train_len, val_len
 
 def train_model(train_loader, val_loader, unique_len, train_len, val_len):
     #Training the model
-    model = CNNModel(num_classes=unique_len).to(device) #Initiliazes CNN model to output num_classes
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
+
+    model = BirdNet(num_labels=unique_len).to(device) #Initiliazes CNN model to output num_classes
     optimizer = optim.Adam(model.parameters(), lr=1e-3) #Adam optimizer is used for updating the model weights
     criterion = nn.CrossEntropyLoss() #Loss function used for classification (cross entropy)
 
@@ -62,26 +76,28 @@ def train_model(train_loader, val_loader, unique_len, train_len, val_len):
         model.train() #Sets model in training mode
         train_loss = 0.0
 
-        for X_batch, y_batch in tqdm(train_loader, desc=f"Epoch {epoch+1} [Train]"):
-            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+        for batch in tqdm(train_loader, desc=f"Epoch {epoch+1} [Train]"):
+            mel   = batch["mel"].to(device)
+            target = batch["target"].to(device)
 
             optimizer.zero_grad()
-            outputs = model(X_batch)
-            loss = criterion(outputs, y_batch)
+            preds = model(mel)
+            loss  = criterion(preds, target)
             loss.backward()
             optimizer.step()
 
-            train_loss += loss.item() * X_batch.size(0)
+            train_loss += loss.item() * mel.size(0)
 
         model.eval() #Sets the model in evaluation mode
         val_loss = 0.0
 
         with torch.no_grad(): #this makes sure the model validation is done without updating the weights
-            for X_batch, y_batch in tqdm(val_loader, desc=f"Epoch {epoch+1} [Val]"):
-                X_batch, y_batch = X_batch.to(device), y_batch.to(device)
-                outputs = model(X_batch)
-                loss = criterion(outputs, y_batch)
-                val_loss += loss.item() * X_batch.size(0)
+            for batch in tqdm(val_loader, desc=f"Epoch {epoch+1} [Val]"):
+                mel   = batch["mel"].to(device)
+                target = batch["target"].to(device)
+                preds = model(mel)
+                loss  = criterion(preds, target)
+                val_loss += loss.item() * mel.size(0)
 
         print(f"Epoch {epoch+1}: Train loss {train_loss/train_len:.4f} | Val loss {val_loss/val_len:.4f}") #Reports average training and validation loss for each epoch
 
