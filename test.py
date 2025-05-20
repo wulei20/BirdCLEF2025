@@ -29,7 +29,7 @@ def test_on_unmarked():
     test_paths = get_file_paths(TEST_PATH)  #Get the paths of the test audio files
 
     prob_sheet = []
-    for path in tqdm(test_paths, desc="Predicting 20% validation set", total=len(test_paths)):
+    for path in tqdm(test_paths, desc="Predicting validation set", total=len(test_paths)):
         #Load audio
         audio, _ = librosa.load(path, sr=SR)
         audio_name = os.path.basename(path).replace('.ogg', '')

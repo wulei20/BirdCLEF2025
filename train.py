@@ -56,23 +56,31 @@ from torch.utils.data import DataLoader, random_split
 def prepare_dataset():
     ds = BirdclefDataset()
     train_ds, val_ds = random_split(ds, [0.9, 0.1])
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
-    val_loader   = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=1, pin_memory=True)
+    val_loader   = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=1)
     unique_len = ds.__len_of_label__()
     train_len = len(train_loader.dataset)
     val_len = len(val_loader.dataset)
     return train_loader, val_loader, unique_len, train_len, val_len
 
-def train_model(train_loader, val_loader, unique_len, train_len, val_len):
+def train_model(train_loader, val_loader, unique_len, train_len, val_len, train_from_checkpoint=False, checkpoint_path=None):
     #Training the model
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Using device: {device}")
+    LEARNING_RATE = 1e-4
+    print(LEARNING_RATE)
 
     model = BirdNet(num_labels=unique_len).to(device) #Initiliazes CNN model to output num_classes
-    optimizer = optim.Adam(model.parameters(), lr=1e-3) #Adam optimizer is used for updating the model weights
-    criterion = nn.CrossEntropyLoss() #Loss function used for classification (cross entropy)
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE) #Adam optimizer is used for updating the model weights
+    criterion = nn.BCELoss() #Loss function used for classification (cross entropy)
+    
+    #Load the model from checkpoint if specified
+    if train_from_checkpoint and checkpoint_path:
+        if os.path.exists(checkpoint_path):
+            print(f"⚠️ Loading model from checkpoint at {checkpoint_path}")
+            model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+        else:
+            print(f"❌ Checkpoint file not found at {checkpoint_path}. Starting training from scratch.")
 
-    for epoch in range(10):  #Epoch number = 10, with 10 epochs this takes like 4 hours
+    for epoch in range(20):  #Epoch number = 10, with 10 epochs this takes like 4 hours
         model.train() #Sets model in training mode
         train_loss = 0.0
 
@@ -99,11 +107,14 @@ def train_model(train_loader, val_loader, unique_len, train_len, val_len):
                 loss  = criterion(preds, target)
                 val_loss += loss.item() * mel.size(0)
 
-        print(f"Epoch {epoch+1}: Train loss {train_loss/train_len:.4f} | Val loss {val_loss/val_len:.4f}") #Reports average training and validation loss for each epoch
+        print(f"Epoch {epoch+1}: Train loss {train_loss/train_len:.10f} | Val loss {val_loss/val_len:.10f}") #Reports average training and validation loss for each epoch
+        if epoch % 5 == 4:
+            torch.save(model.state_dict(), SAVE_PATH + '_checkpoint_ep' + str(epoch+1) + '_lr' + str(LEARNING_RATE) + '.pth') #Saves the model to the path defined in utils.py
+            print("Save model to path: " + SAVE_PATH + '_checkpoint_ep' + str(epoch+1) + '_lr' + str(LEARNING_RATE) + '.pth')
 
     #Save the model
-    torch.save(model.state_dict(), SAVE_PATH) #Saves the model to the path defined in utils.py
-    print("✅ Model saved to", SAVE_PATH) #To make sure the model is saved
+    torch.save(model.state_dict(), SAVE_PATH + '_lr' + str(LEARNING_RATE) + '.pth') #Saves the model to the path defined in utils.py
+    print("✅ Model saved to", SAVE_PATH + '_lr' + str(LEARNING_RATE) + '.pth') #To make sure the model is saved
 
 def valid_train_result(train_labels, val_labels, val_paths):
     _, _, unique_labels = statistic_labels() #Get the paths and labels of the audio files
@@ -210,6 +221,6 @@ def show_single(label_id, file_name):
     plt.tight_layout()
     plt.show()
 
-train_loader, val_loader, unique_labels, train_labels, val_labels = prepare_dataset() #Prepares the dataset and splits it into training and validation sets
-train_model(train_loader, val_loader, len(unique_labels), len(train_labels), len(val_labels)) #Trains the model
+train_loader, val_loader, unique_len, train_len, val_len = prepare_dataset() #Prepares the dataset and splits it into training and validation sets
+train_model(train_loader, val_loader, unique_len, train_len, val_len) #Trains the model
 valid_train_result(train_labels, val_labels, val_loader.dataset.filepaths) #Validates the model with the 20% validation set
