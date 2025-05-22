@@ -19,7 +19,7 @@ class BirdclefDataset(Dataset):
 
         self.samples = []
         for _, row in self.df.iterrows():
-            ogg_path = self.image_root / Path(row.filename)
+            ogg_path = self.ogg_root / Path(row.filename)
             if not ogg_path.exists():
                 continue
 
