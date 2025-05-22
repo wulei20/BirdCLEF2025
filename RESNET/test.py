@@ -1,19 +1,27 @@
 import torch
 import os
 from tqdm import tqdm
-from model import CNNModel, BirdNet
+from model import BirdNet
 import matplotlib.pyplot as plt
 import numpy as np
 import librosa
 from help_functions import *
+import pandas as pd
 
 def test_on_unmarked():
-    _, _, unique_labels = statistic_labels() #Get the paths and labels of the audio files
-    label2idx = get_label2idx(unique_labels) #Get the label to index mapping
-    label_list = [label2idx[str(i)] for i in range(len(label2idx))]
+    #_, _, unique_labels = statistic_labels() #Get the paths and labels of the audio files
+    #label2idx = get_label2idx(unique_labels) #Get the label to index mapping
+    #label_list = [label2idx[str(i)] for i in range(len(label2idx))]
+    df = pd.read_csv(TRAIN_CSV)
+    label2idx = {l: i for i, l in enumerate(sorted(df.primary_label.unique()))}
+    idx2label = {i: l for i, l in enumerate(sorted(df.primary_label.unique()))}
+    num_labels = len(label2idx)
+    print(f"Number of labels: {num_labels}")
+    label_list = [idx2label[i] for i in range(len(label2idx))]
+
 
     #Initialize and load model, this code will favor using the newly trained model but if not detected it will use the pretrained option
-    model = BirdNet(num_classes=len(unique_labels)).to(device)
+    model = BirdNet(num_labels=206).to(device)
 
     if os.path.exists(SAVE_PATH):
         print(f"✅ Using newly trained model at {SAVE_PATH}")
@@ -29,7 +37,7 @@ def test_on_unmarked():
     test_paths = get_file_paths(TEST_PATH)  #Get the paths of the test audio files
 
     prob_sheet = []
-    for path in tqdm(test_paths, desc="Predicting 20% validation set", total=len(test_paths)):
+    for path in tqdm(test_paths, desc="Predicting validation set", total=len(test_paths)):
         #Load audio
         audio, _ = librosa.load(path, sr=SR)
         audio_name = os.path.basename(path).replace('.ogg', '')

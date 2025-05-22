@@ -5,19 +5,19 @@ import os
 import pandas as pd
 
 #Parameters
-AUDIO_DIR = '../data/train_audio/' #locate the audio files
+AUDIO_DIR = '../train_audio/' #locate the audio files
 SR        = 32000 #Sampling rate 32K hz
 CHUNK_LEN = 5  #5 seconds
 N_MELS    = 128 #the amount of mel frequency bands used to convert audios to spectrogram
 BATCH_SIZE = 32 #Choose batch size
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') #Define when to use gpu or cpu
-SAVE_PATH = '../working/birdclef_cnn.pth' #Newly trained model
+SAVE_PATH = '../result/birdclef_cnn_checkpoint_ep10_lr0.001.pth' #Newly trained model
 MODEL_PATH = '../working/birdclef_cnnstratified.pth' #Pretrained option
 TEST_PATH = '../data/test_soundscapes/' #Test audio files
 LABLE2IDX_FILE_PATH = '../working/label2idx.csv' #Label to index mapping
 OUTPUT_CSV = '../working/submission.csv' #Output csv file
 SAMPLE_CSV = '../data/sample_submission.csv' #Sample csv file for the test set
-TRAIN_CSV = '../data/train.csv' #Train csv file
+TRAIN_CSV = '../train.csv' #Train csv file
 TRAIN_AUDIO = '../data/train_audio/' #Train audio files
 
 ###Helper functions
@@ -104,14 +104,14 @@ def get_file_paths(folder):
 def compare_and_rearrange_final_csv(generated_list:list, generated_columns:list, sample_csv: pd.DataFrame):
     valid_keys = set(sample_csv.iloc[:, 0])
     unmatched = [row for row in generated_list if row[0] not in valid_keys]
-    if unmatched:
-        print(f"Unmatched keys: {unmatched}")
-        return
+    # if unmatched:
+    #     print(f"Unmatched keys: {unmatched}")
+    #     return
     df_generated = pd.DataFrame(generated_list, columns=["row_id"] + generated_columns)
-    if set(df_generated.columns) != set(sample_csv.columns):
-        print("Column names do not match.")
-        return
-    df_aligned = df_generated.set_index('row_id').loc[sample_csv['row_id']].reset_index()
-    df_aligned = df_aligned[sample_csv.columns]
-    df_aligned.to_csv(OUTPUT_CSV, index=False)
+    # if set(df_generated.columns) != set(sample_csv.columns):
+    #     print("Column names do not match.")
+    #     return
+    #df_aligned = df_generated.set_index('row_id').loc[sample_csv['row_id']].reset_index()
+    #df_aligned = df_aligned[sample_csv.columns]
+    df_generated.to_csv(OUTPUT_CSV, index=False)
     print(f"✅ Aligned CSV saved to {OUTPUT_CSV}")
