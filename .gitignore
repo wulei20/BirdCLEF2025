@@ -3,3 +3,6 @@
 *.ogg
 *.csv
 *.txt
+**outputs**
+**wandb**
+*/t.py

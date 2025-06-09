@@ -12,13 +12,16 @@ class CFG:
 
     stage = 'train_bce'
 
-    train_datadir = '/kaggle/input/birdclef-2025/train_audio'
-    train_csv = '/kaggle/input/birdclef-2025/train.csv'
-    test_soundscapes = '/kaggle/input/birdclef-2025/test_soundscapes'
-    submission_csv = '/kaggle/input/birdclef-2025/sample_submission.csv'
-    taxonomy_csv = '/kaggle/input/birdclef-2025/taxonomy.csv'
-    model_files = ['/kaggle/input/bird2025-sed-ckpt/sedmodel.pth'
+    train_datadir = 'birdclef2023-2nd-place-solution/inputs/train_audio'
+    train_csv = 'birdclef2023-2nd-place-solution/inputs/train.csv'
+    test_soundscapes = 'birdclef2023-2nd-place-solution/inputs/train_audio/train_soundscapes'
+    submission_csv = 'birdclef2023-2nd-place-solution/inputs/sample_submission.csv'
+    taxonomy_csv = 'birdclef2023-2nd-place-solution/inputs/taxonomy.csv'
+    #model_files = ['birdclef2023-2nd-place-solution/outputs/sedmodel.pth'
+    #              ]
+    model_files = ['birdclef2023-2nd-place-solution/outputs/sed_seresnext26t/pytorch/train_ce/epochepoch=14.ckpt'
                   ]
+    cfg_file = 'birdclef2023-2nd-place-solution/inputs/2.txt'
  
     model_name = 'seresnext26t_32x4d'  
     pretrained = False

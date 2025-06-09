@@ -65,12 +65,12 @@ class BirdCLEFModel(nn.Module):
         super().__init__()
         self.cfg = cfg
         
-        taxonomy_df = pd.read_csv('/kaggle/input/birdclef-2025/taxonomy.csv')
+        taxonomy_df = pd.read_csv(cfg['taxonomy_csv'])
         self.num_classes = len(taxonomy_df)
 
         self.bn0 = nn.BatchNorm2d(cfg['n_mels'])
         
-        self.backbone = timm.create_model(
+        backbone = timm.create_model(
             cfg['model_name'],
             pretrained=False,
             in_chans=cfg['in_channels'],
@@ -78,17 +78,17 @@ class BirdCLEFModel(nn.Module):
             drop_path_rate=0.2,
         )
 
-        layers = list(self.backbone.children())[:-2]
+        layers = list(backbone.children())[:-2]
         self.encoder = nn.Sequential(*layers)
         
-        if "efficientnet" in self.cfg['model_name']:
-            backbone_out = self.backbone.classifier.in_features
-        elif "eca" in self.cfg['model_name']:
-            backbone_out = self.backbone.head.fc.in_features
-        elif "res" in self.cfg['model_name']:
-            backbone_out = self.backbone.fc.in_features
-        else:
-            backbone_out = self.backbone.num_features
+        # if "efficientnet" in self.cfg['model_name']:
+        #     backbone_out = backbone.classifier.in_features
+        # elif "eca" in self.cfg['model_name']:
+        #     backbone_out = backbone.head.fc.in_features
+        # elif "res" in self.cfg['model_name']:
+        backbone_out = backbone.fc.in_features
+        # else:
+        #     backbone_out = backbone.num_features
             
         
         self.fc1 = nn.Linear(backbone_out, backbone_out, bias=True)
@@ -160,10 +160,7 @@ class BirdCLEFModel(nn.Module):
             spec = spec / 255
         else:
             raise NotImplementedError
-                
-        if self.cfg['in_channels'] == 3:
-            #spec = image_delta(spec)
-            pass
+
         return spec
 
     def forward(self, x):

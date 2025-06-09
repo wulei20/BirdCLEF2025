@@ -1,7 +1,6 @@
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
-import timm
 from torch.distributions import Beta
 import pytorch_lightning as pl
 import numpy as np
@@ -362,6 +361,7 @@ class BirdClefModelBase(pl.LightningModule):
         self.lr = cfg.lr[stage]
         self.epochs = cfg.epochs[stage]
         self.in_chans = cfg.in_chans
+        self.training_step_outputs = []
 
         if self.loss == "ce":
             self.loss_function = nn.CrossEntropyLoss(
@@ -514,6 +514,7 @@ class BirdClefModelBase(pl.LightningModule):
         y_pred, target, loss = self(batch)
 
         # self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.training_step_outputs.append(loss)
 
         return {"loss": loss}
 
@@ -615,8 +616,9 @@ class BirdClefModelBase(pl.LightningModule):
             avg_score = 0
         return {"val_loss": avg_loss, "val_cmap": avg_score}
 
-    def on_train_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
+    def on_train_epoch_end(self):
+        avg_loss = torch.stack(self.training_step_outputs).mean()
+        self.training_step_outputs.clear()
         self.log("train_loss", avg_loss, on_step=False, on_epoch=True, prog_bar=True)
         if (self.ema is not None) & ((self.current_epoch > self.epochs - 3 - 1)):
             if not os.path.exists(self.cfg.output_path[stage]):
@@ -931,7 +933,11 @@ def load_model(cfg,stage,train=True):
         model_ckpt = cfg.final_model_path
 
     if model_ckpt is not None:
-        state_dict = torch.load(model_ckpt,map_location=cfg.DEVICE)['state_dict']
+        #import types, sys, numpy as np
+        #mod = types.ModuleType("numpy._core")
+        #mod.__dict__.update(np.core.__dict__)
+        #sys.modules["numpy._core"] = mod
+        state_dict = torch.load(model_ckpt,map_location=cfg.DEVICE, weights_only=False)['model_state_dict']
         print('loading model from checkpoint')
     else:
         state_dict = None
@@ -948,13 +954,13 @@ def load_model(cfg,stage,train=True):
             model = BirdClefTrainModelSED(cfg, stage)
             if state_dict is not None:
                 # pretrain to train
-                if stage == 'train_ce':
-                    state_dict.pop('att_block.att.weight')
-                    state_dict.pop('att_block.att.bias')
-                    state_dict.pop('att_block.cla.weight')
-                    state_dict.pop('att_block.cla.bias')
-                    model.load_state_dict(state_dict,strict=False)
-                else:
+                # if stage == 'train_ce':
+                #     state_dict.pop('att_block.att.weight')
+                #     state_dict.pop('att_block.att.bias')
+                #     state_dict.pop('att_block.cla.weight')
+                #     state_dict.pop('att_block.cla.bias')
+                #     model.load_state_dict(state_dict,strict=False)
+                # else:
                     model.load_state_dict(state_dict,strict=False)
         else:
             model = BirdClefInferModelSED(cfg, stage)

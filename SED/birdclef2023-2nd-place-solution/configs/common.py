@@ -5,9 +5,9 @@ import torch
 cfg = SimpleNamespace(**{})
 cfg.WANDB_API_KEY = '6e54cafd2ef58c74b38356abc0cf7ebd062dfd78'
 cfg.infer_duration = 5
-cfg.valid_duration = 60
+cfg.valid_duration = 5
 cfg.label_smoothing = 0.1
-cfg.weight_decay = 1e-3
+cfg.weight_decay = 1e-4
 cfg.SR = 32000
 cfg.DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 cfg.primary_label_col = 'primary_label'

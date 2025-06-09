@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from ast import literal_eval
 import torch
+import librosa
 import os
 
 def prepare_cfg(cfg,stage):
@@ -15,7 +16,7 @@ def prepare_cfg(cfg,stage):
     df = pd.read_csv(cfg.train_data)
     #将primary_label列去重后得到primary_label列表
     primary_label_list = df['primary_label'].unique().tolist()
-    print('primary_label_list:',primary_label_list)
+    # print('primary_label_list:',primary_label_list)
     cfg.bird_cols = primary_label_list
 
 
@@ -57,8 +58,8 @@ def preprocess(cfg):
     #df['secondary_labels_very_strict'] = df['secondary_labels_very_strict'].apply(lambda x: literal_eval(x))
     #df['version'] = df['version'].astype(str)
     #df['rating'] = df['rating'].mask(np.isnan(df['rating'].values),df['q'].map({'A':5,'B':4,'C':3,'D':2,'E':1,'no score':0}))
-    df['filename'] = df['filename'].apply(lambda x: f'XC{x}')
-    df['path'] = df['filename'].apply(lambda x: os.path.join(cfg.train_dir,f'XC{x}'))
+    #df['filename'] = df['filename'].apply(lambda x: f'XC{x}')
+    df['path'] = df['filename'].apply(lambda x: os.path.join(cfg.train_dir,f'{x}'))
     # ensure all the train data is available
     if not df['path'].apply(lambda x:os.path.exists(x)).all():
         print('===========================================================')
@@ -66,6 +67,16 @@ def preprocess(cfg):
         print('warning: only audios available will be used for training')
         print('===========================================================')
     #df = df[df['path'].apply(lambda x:os.path.exists(x))].reset_index(drop=True)
+
+    def get_duration(path):
+        try:
+            duration = librosa.get_duration(path=path)
+        except Exception as e:
+            print(f'Error loading {path}: {e}')
+            duration = None
+        return duration
+
+    df['duration'] = df['path'].apply(get_duration)
 
     labels = np.zeros(shape=(len(df),len(cfg.bird_cols)))
     df_labels = pd.DataFrame(labels,columns=cfg.bird_cols)
@@ -94,6 +105,9 @@ def preprocess(cfg):
 
     #df_labels[((df['duration']<=cfg.background_duration_thre)&(df['presence_type']!='foreground'))|(df['presence_type']=='foreground')].reset_index(drop=True)
     #df = df[((df['duration']<=cfg.background_duration_thre)&(df['presence_type']!='foreground'))|(df['presence_type']=='foreground')].reset_index(drop=True)
+
+    #df = df.head(1)
+    #df_labels = df_labels.head(1)
 
     df_train,df_valid,df_labels_train,df_labels_valid = train_test_split(df,df_labels)
 

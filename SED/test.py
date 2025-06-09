@@ -27,6 +27,8 @@ from typing import Union
 
 import concurrent.futures
 
+import json
+
 from helper import *
 
 from model import *
@@ -115,11 +117,18 @@ def load_models(cfg, num_classes):
         try:
             print(f"Loading model: {model_path}")
             checkpoint = torch.load(model_path, map_location=torch.device(cfg.device), weights_only=False)
-            cfg_temp = checkpoint['cfg']
+            #cfg_temp = checkpoint['cfg']
+            
+            with open(cfg.cfg_file) as f:
+                cfg_temp = json.load(f)
+
+            #cfg_tmp = cfg_tmp | cfg
+
             cfg_temp['device'] = cfg.device
+            cfg_temp['taxonomy_csv'] = cfg.taxonomy_csv
             
             model = BirdCLEFModel(cfg_temp)
-            model.load_state_dict(checkpoint['model_state_dict'])
+            model.load_state_dict(checkpoint['state_dict'], strict=False)
             model = model.to(cfg.device)
             model.eval()
             model.zero_grad()
@@ -185,20 +194,16 @@ def run_inference(cfg, models, species_ids):
     all_predictions = []
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        results = list(
-        executor.map(
-            predict_on_spectrogram,
-            test_files,
-            itertools.repeat(models),
-            itertools.repeat(cfg),
-            itertools.repeat(species_ids)
-        )
-    )
+        futures = [
+            executor.submit(predict_on_spectrogram, file, models, cfg, species_ids)
+            for file in test_files
+        ]
 
-    for rids, preds in results:
-        all_row_ids.extend(rids)
-        all_predictions.extend(preds)
-    
+        for future in tqdm(concurrent.futures.as_completed(futures), total=len(futures), desc="Predicting"):
+            rids, preds = future.result()
+            all_row_ids.extend(rids)
+            all_predictions.extend(preds)
+
     return all_row_ids, all_predictions
 
 def create_submission(row_ids, predictions, species_ids, cfg):

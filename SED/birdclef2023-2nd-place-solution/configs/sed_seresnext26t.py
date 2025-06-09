@@ -26,7 +26,7 @@ cfg.secondary_label = 0.9
 cfg.secondary_label_weight = 0.5
 
 
-cfg.batch_size = 128
+cfg.batch_size = 32
 cfg.PRECISION = 32
 cfg.seed = {
     "pretrain_ce": 19940215,
@@ -35,8 +35,8 @@ cfg.seed = {
     #"train_bce": 20231911,
     #"finetune": 20230523,
 }
-cfg.DURATION_TRAIN = 10
-cfg.DURATION_FINETUNE = 30
+cfg.DURATION_TRAIN = 5
+cfg.DURATION_FINETUNE = 5
 cfg.freeze = False
 cfg.mixup = False
 cfg.mixup2 = True
@@ -57,6 +57,7 @@ cfg.lr = {
     "pretrain_ce": 3e-4,
     "pretrain_bce": 1e-3,
     "train_ce": 3e-4,
+    #"train_ce": 3e-4,
     #"train_bce": 1e-3,
     #"finetune": 6e-4,
 }
@@ -64,7 +65,7 @@ cfg.lr = {
 cfg.model_ckpt = {
     "pretrain_ce": None,
     "pretrain_bce": "outputs/sed_seresnext26t/pytorch/pretrain_ce/last.ckpt",
-    "train_ce": "outputs/sed_seresnext26t/pytorch/pretrain_bce/last.ckpt",
+    "train_ce": "outputs/sedmodel.pth",
     #"train_bce": "outputs/sed_seresnext26t/pytorch/train_ce/last.ckpt",
     #"finetune": "outputs/sed_seresnext26t/pytorch/train_bce/last.ckpt",
 }
@@ -89,22 +90,22 @@ cfg.loss = {
     #"finetune": "bce",
 }
 
-cfg.img_size = 256
-cfg.n_mels = 128
+cfg.img_size = 384
+cfg.n_mels = 256
 cfg.n_fft = 2048
-cfg.f_min = 0
+cfg.f_min = 20
 cfg.f_max = 16000
 
 cfg.valid_part = int(cfg.valid_duration / cfg.infer_duration)
 cfg.hop_length = cfg.infer_duration * cfg.SR // (cfg.img_size - 1)
 
-cfg.normal = 255
+cfg.normal = 80
 
 cfg.tta_delta = 2
 
 cfg.am_audio_transforms = amCompose([
-    AddBackgroundNoise(cfg.birdclef2021_nocall + cfg.birdclef2020_nocall + cfg.freefield + cfg.warblrb + cfg.birdvox + cfg.rainforest + cfg.environment, min_snr_in_db=3.0,max_snr_in_db=30.0,p=0.5),
-    Gain(min_gain_in_db=-12, max_gain_in_db=12, p=0.2),
+    #AddBackgroundNoise(cfg.birdclef2021_nocall + cfg.birdclef2020_nocall + cfg.freefield + cfg.warblrb + cfg.birdvox + cfg.rainforest + cfg.environment, min_snr_in_db=3.0,max_snr_in_db=30.0,p=0.5),
+    Gain(min_gain_db=-12, max_gain_db=12, p=0.2),
 
 ])
 

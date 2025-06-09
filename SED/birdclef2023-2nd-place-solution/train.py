@@ -63,24 +63,39 @@ def main():
         transforms
     )
 
-    logger = WandbLogger(project='BirdClef-2023', name=f'{model_name}_{stage}')
-    checkpoint_callback = ModelCheckpoint(
-        #monitor='val_loss',
-        monitor=None,
-        dirpath= cfg.output_path[stage],
-        save_top_k=0,
-        save_last= True,
+    logger = WandbLogger(project='BirdClef-2025', name=f'{model_name}_{stage}')
+
+    best_model_ckpt = ModelCheckpoint(
+        monitor='train_loss',
+        dirpath=cfg.output_path[stage],
+        filename='best-epoch{epoch}-val_loss{val_loss:.4f}',
+        save_top_k=1,
+        mode='min',
         save_weights_only=True,
-        #filename= './ckpt_epoch_{epoch}_val_loss_{val_loss:.2f}',
-        #filename ='./ckpt_{epoch}_{val_loss}',
-        verbose= True,
-        every_n_epochs=1,
-        mode='min'
+        verbose=True
     )
-    callbacks_to_use = [checkpoint_callback]
+    last_model_ckpt = ModelCheckpoint(
+        dirpath=cfg.output_path[stage],
+        filename='last',
+        save_top_k=1,
+        save_last=True,
+        save_weights_only=True,
+        verbose=True
+    )
+    periodic_ckpt = ModelCheckpoint(
+        dirpath=cfg.output_path[stage],
+        filename='epoch{epoch}',
+        every_n_epochs=5,
+        save_top_k=-1,  # 保存所有周期模型
+        save_weights_only=True,
+        verbose=True
+    )
+
+    callbacks_to_use = [best_model_ckpt, last_model_ckpt, periodic_ckpt]
     model = load_model(cfg,stage)
+    #torch.save({"state_dict": model.state_dict()}, "ckpt.pth")
     trainer = pl.Trainer(
-        devices=1,
+        devices=2,
         val_check_interval=1.0,
         deterministic=None,
         max_epochs=cfg.epochs[stage],
@@ -92,7 +107,7 @@ def main():
     print("Running trainer.fit")
     trainer.fit(model, train_dataloaders = dl_train, val_dataloaders = dl_val)
 
-    gc.collect()
+    # gc.collect()
     torch.cuda.empty_cache()
     return
 
