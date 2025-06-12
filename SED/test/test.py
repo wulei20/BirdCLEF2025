@@ -1,28 +1,18 @@
-import os
-import gc
 import json
 import time
-import random
 import logging
 import warnings
-import itertools
 from pathlib import Path
 from typing import List
 
-import joblib
 import numpy as np
 import pandas as pd
-import librosa
 import soundfile as sf
 
 import torch
-from torch import nn
-from torch.cuda.amp import autocast, GradScaler
-import timm
 from tqdm.auto import tqdm
-import torchaudio
 from glob import glob
-from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures as cf
 
 from model import *
 from helper import *
@@ -31,7 +21,7 @@ warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.ERROR)
 
 def initialize():
-    configuration = CFG()
+    configuration = Config()
     print(f"Device selected: {configuration.device}")
     print("Loading taxonomy labels...")
     label_df = pd.read_csv(configuration.taxonomy_csv)
@@ -39,9 +29,9 @@ def initialize():
     set_seed(configuration.seed)
     return configuration, target_labels
 
-def chunk_audio(file_path, cfg):
+def chunk_audio(file_path, config):
     audio_data, sample_rate = sf.read(file_path, dtype='float32')
-    total_len = cfg.SR * cfg.target_duration
+    total_len = config.SR * config.target_duration
     segments = []
     audio_data = np.concatenate([audio_data] * 3)
 
@@ -53,7 +43,7 @@ def chunk_audio(file_path, cfg):
 
     output_clips = []
     for idx, (start, end) in enumerate(segments):
-        pad = int(cfg.SR * (cfg.train_duration - cfg.target_duration) / 2)
+        pad = int(config.SR * (config.train_duration - config.target_duration) / 2)
         true_start = start - pad + len(audio_data)//3
         true_end = end + pad + len(audio_data)//3
         segment = audio_data[true_start:true_end].astype(np.float32)
@@ -67,18 +57,18 @@ def chunk_audio(file_path, cfg):
 
     return output_clips
 
-def discover_models(cfg) -> List[str]:
+def discover_models(config) -> List[str]:
     model_files = []
-    root = Path(cfg.model_path)
+    root = Path(config.model_path)
     for m in root.glob('**/*.pth'):
         model_files.append(str(m))
     return model_files
 
-def prepare_models(cfg, class_count):
+def prepare_models(config, class_count):
     all_models = []
-    model_paths = cfg.model_files
+    model_paths = config.model_files
     if not model_paths:
-        print(f"No model files in: {cfg.model_path}")
+        print(f"No model files in: {config.model_path}")
         return all_models
 
     print(f"Loading {len(model_paths)} model(s)...")
@@ -86,17 +76,17 @@ def prepare_models(cfg, class_count):
     for m_path in model_paths:
         try:
             print(f"Initializing model from: {m_path}")
-            checkpoint = torch.load(m_path, map_location=cfg.device)
+            checkpoint = torch.load(m_path, map_location=config.device)
 
-            with open(cfg.cfg_file) as f:
+            with open(config.cfg_file) as f:
                 local_cfg = json.load(f)
 
-            local_cfg['device'] = cfg.device
-            local_cfg['taxonomy_csv'] = cfg.taxonomy_csv
+            local_cfg['device'] = config.device
+            local_cfg['taxonomy_csv'] = config.taxonomy_csv
 
             net = BirdCLEFModel(local_cfg)
             net.load_state_dict(checkpoint['state_dict'], strict=False)
-            net.to(cfg.device)
+            net.to(config.device)
             net.eval()
             net.zero_grad()
             net.half().float()
@@ -106,18 +96,18 @@ def prepare_models(cfg, class_count):
 
     return all_models
 
-def infer_audio(file_path, model_list, cfg, label_list):
+def infer_audio(file_path, model_list, config):
     file_path = str(file_path)
     print(f"Running inference on: {Path(file_path).stem}")
 
-    audio_segments = chunk_audio(file_path, cfg)
+    audio_segments = chunk_audio(file_path, config)
     results = []
     row_ids = []
 
     for idx, segment in enumerate(audio_segments):
-        time_tag = (idx + 1) * cfg.target_duration
+        time_tag = (idx + 1) * config.target_duration
         row_ids.append(f"{Path(file_path).stem}_{time_tag}")
-        tensor_segment = torch.tensor(segment).unsqueeze(0).unsqueeze(0).to(cfg.device)
+        tensor_segment = torch.tensor(segment).unsqueeze(0).unsqueeze(0).to(config.device)
 
         with torch.no_grad():
             if len(model_list) == 1:
@@ -130,8 +120,8 @@ def infer_audio(file_path, model_list, cfg, label_list):
 
     return row_ids, results
 
-def bulk_infer(cfg, model_group, label_names):
-    files = list(Path(cfg.test_soundscapes).glob('*.ogg'))
+def bulk_infer(config, model_group):
+    files = list(Path(config.test_soundscapes).glob('*.ogg'))
     if not files:
         files = sorted(glob(str(Path('/kaggle/input/birdclef-2025/train_soundscapes') / '*.ogg')))[:10]
 
@@ -139,23 +129,23 @@ def bulk_infer(cfg, model_group, label_names):
     all_ids = []
     all_preds = []
 
-    with ThreadPoolExecutor(max_workers=4) as exec_pool:
-        futures = [exec_pool.submit(infer_audio, f, model_group, cfg, label_names) for f in files]
-        for future in tqdm(concurrent.futures.as_completed(futures), total=len(futures)):
+    with cf.ThreadPoolExecutor(max_workers=4) as exec_pool:
+        futures = [exec_pool.submit(infer_audio, f, model_group, config) for f in files]
+        for future in tqdm(cf.as_completed(futures), total=len(futures)):
             ids, preds = future.result()
             all_ids.extend(ids)
             all_preds.extend(preds)
 
     return all_ids, all_preds
 
-def compose_submission(ids, preds, label_pool, cfg):
+def compose_submission(ids, preds, label_pool, config):
     print("Constructing submission DataFrame...")
     submit = {'row_id': ids}
     for i, label in enumerate(label_pool):
         submit[label] = [p[i] for p in preds]
 
     submission = pd.DataFrame(submit).set_index('row_id')
-    ref = pd.read_csv(cfg.submission_csv, index_col='row_id')
+    ref = pd.read_csv(config.submission_csv, index_col='row_id')
 
     missing = set(ref.columns) - set(submission.columns)
     for col in missing:
@@ -190,8 +180,8 @@ def main():
     start = time.time()
     print("=== BirdCLEF 2025 Inference Pipeline Start ===")
 
-    cfg, labels = initialize()
-    models = prepare_models(cfg, len(labels))
+    config, labels = initialize()
+    models = prepare_models(config, len(labels))
 
     if not models:
         print("Model loading failed. Check configuration.")
@@ -199,8 +189,8 @@ def main():
 
     print(f"Using {'ensemble' if len(models) > 1 else 'single'} model configuration")
 
-    ids, preds = bulk_infer(cfg, models, labels)
-    final_df = compose_submission(ids, preds, labels, cfg)
+    ids, preds = bulk_infer(config, models)
+    final_df = compose_submission(ids, preds, labels, config)
 
     output_csv = 'submission.csv'
     final_df.to_csv(output_csv, index=False)
