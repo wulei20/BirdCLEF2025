@@ -20,59 +20,36 @@ SAMPLE_CSV = '../data/sample_submission.csv' #Sample csv file for the test set
 TRAIN_CSV = '../train.csv' #Train csv file
 TRAIN_AUDIO = '../data/train_audio/' #Train audio files
 
-###Helper functions
-#Split audio in 5 seconds function
-def split_audio(audio, sr=SR, chunk_length=CHUNK_LEN):
-    samples_per_chunk = chunk_length * sr
-    chunks = []
-    for i in range(0, len(audio), samples_per_chunk):
-        chunk = audio[i:i + samples_per_chunk]
-        if len(chunk) < samples_per_chunk:
-            chunk = np.pad(chunk,
-                           (0, samples_per_chunk - len(chunk)),
-                           mode='constant')
-        chunks.append(chunk)
-    return chunks
+# Converts audio chunks to mel spectrograms
+def audio_to_mel_spectrogram(audio_chunk, sr=SR, n_mels=N_MELS):
+    mel_val = librosa.power_to_db(librosa.feature.melspectrogram(y=audio_chunk, sr=sr, n_mels=n_mels), ref=np.max)
+    return mel_val
 
-#Converts audio chunks into mel spectrograms
-def to_mel_spectrogram(audio_chunk, sr=SR, n_mels=N_MELS):
-    mel = librosa.feature.melspectrogram(y=audio_chunk,
-                                         sr=sr,
-                                         n_mels=n_mels)
-    mel_db = librosa.power_to_db(mel, ref=np.max)
-    return mel_db
-
-#Normalizes all spectrograms created
-def normalize_mel(mel_db):
-    mel_db -= mel_db.min()
-    max_val = mel_db.max()
-    if max_val > 0:
-        mel_db /= max_val
+# Normalizes mel spectrogram values to a range of 0 to 1
+def mel_normalize(mel_val):
+    mel_val -= mel_val.min()
+    mel_max = mel_val.max()
+    if mel_max > 0:
+        mel_val /= mel_max
     else:
-        mel_db[:] = 0.0
-    return mel_db
+        mel_val[:] = 0.0
+    return mel_val
 
-def statistic_labels():
-    #Create 2 empty lists
-    ogg_paths = []
-    labels = []
-
-    #This part walks through all audio files in the directory and extracts the full paths and associated labels
-    for root, _, files in os.walk(AUDIO_DIR):
-        for fname in files:
-            if fname.lower().endswith('.ogg'):
-                ogg_paths.append(os.path.join(root, fname))
-                label = os.path.basename(root)  #foldername = bird species
-                labels.append(label)
-
-    #Map the bird labels to integers
-    unique_labels = sorted(list(set(labels)))
-    return ogg_paths, labels, unique_labels
+# Splits audio into chunks of specified length
+def audio_split(audio, sr=SR, chunk_length=CHUNK_LEN):
+    samples_each_chunk = sr * chunk_length
+    ret_chunks = []
+    for i in range(0, len(audio), samples_each_chunk):
+        chunk = audio[i:i + samples_each_chunk]
+        if len(chunk) < samples_each_chunk:
+            chunk = np.pad(chunk, (0, samples_each_chunk - len(chunk)), mode='constant')
+        ret_chunks.append(chunk)
+    return ret_chunks
 
 def save_label2idx_to_csv(label2idx:dict):
-    #Convert the dictionary to a DataFrame
+    # Convert the label2idx dictionary to a DataFrame
     df = pd.DataFrame(list(label2idx.items()), columns=['label', 'index'])
-    #Save the DataFrame to a CSV file
+    # Save the DataFrame to a CSV file
     df.to_csv(LABLE2IDX_FILE_PATH, index=False)
     print(f"✅ Label to index mapping saved to {LABLE2IDX_FILE_PATH}")
 

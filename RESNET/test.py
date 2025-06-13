@@ -9,9 +9,6 @@ from help_functions import *
 import pandas as pd
 
 def test_on_unmarked():
-    #_, _, unique_labels = statistic_labels() #Get the paths and labels of the audio files
-    #label2idx = get_label2idx(unique_labels) #Get the label to index mapping
-    #label_list = [label2idx[str(i)] for i in range(len(label2idx))]
     df = pd.read_csv(TRAIN_CSV)
     label2idx = {l: i for i, l in enumerate(sorted(df.primary_label.unique()))}
     idx2label = {i: l for i, l in enumerate(sorted(df.primary_label.unique()))}
@@ -20,16 +17,16 @@ def test_on_unmarked():
     label_list = [idx2label[i] for i in range(len(label2idx))]
 
 
-    #Initialize and load model, this code will favor using the newly trained model but if not detected it will use the pretrained option
+    # Initialize and load model, this code will favor using the newly trained model but if not detected it will use the pretrained option
     model = BirdNet(num_labels=206).to(device)
 
     if os.path.exists(SAVE_PATH):
-        print(f"✅ Using newly trained model at {SAVE_PATH}")
+        print(f"⚠️ Loading newly trained model from {SAVE_PATH}")
         model.load_state_dict(torch.load(SAVE_PATH, map_location=device))
     elif os.path.exists(MODEL_PATH):
-        print(f"⚠️ Newly trained model not found. Using pretrained model at {MODEL_PATH}")
+        print(f"⚠️ Loading pretrained model from {MODEL_PATH}")
         model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
-    #else:
+    # else:
     #    raise FileNotFoundError("❌ No model file found at either SAVE_PATH or MODEL_PATH.")
 
     model.eval()
@@ -41,23 +38,23 @@ def test_on_unmarked():
         #Load audio
         audio, _ = librosa.load(path, sr=SR)
         audio_name = os.path.basename(path).replace('.ogg', '')
-        chunks = split_audio(audio)
+        chunks = audio_split(audio)
 
         for i, chunk in enumerate(chunks):
             if len(chunk) < CHUNK_LEN * SR:
                 chunk = np.pad(chunk, (0, CHUNK_LEN * SR - len(chunk)))
 
-            mel = to_mel_spectrogram(chunk)
-            mel = normalize_mel(mel)  #Normalization
-            mel = torch.tensor(mel).unsqueeze(0).float().to(device)
+            mel_val = audio_to_mel_spectrogram(chunk)
+            mel_val = mel_normalize(mel_val)  #Normalization
+            mel_val = torch.tensor(mel_val).unsqueeze(0).float().to(device)
             
-            mel = (mel - mel.min()) / (mel.max() - mel.min() + 1e-6)
-            mel = torch.nn.functional.interpolate(mel.unsqueeze(0), size=(224, 224), mode='bilinear', align_corners=False)
-            mel = mel.repeat(1, 3, 1, 1)  # [1,3,224,224]
+            mel_val = (mel_val - mel_val.min()) / (mel_val.max() - mel_val.min() + 1e-6)
+            mel_val = torch.nn.functional.interpolate(mel_val.unsqueeze(0), size=(224, 224), mode='bilinear', align_corners=False)
+            mel_val = mel_val.repeat(1, 3, 1, 1)  # [1,3,224,224]
 
 
             with torch.no_grad():
-                logits = model(mel)
+                logits = model(mel_val)
                 probs = logits.cpu().numpy().flatten()
                 chunk_time = (i + 1) * CHUNK_LEN
                 chunk_name = f"{audio_name}_{chunk_time}"
