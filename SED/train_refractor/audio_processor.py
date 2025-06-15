@@ -103,6 +103,22 @@ class RandomTransform:
             y = transform(y)
         return y
 
+class AudioTransformBase:
+    def __init__(self, always_apply=False, probability=0.5):
+        self.always_apply = always_apply
+        self.probability = probability
+
+    def __call__(self, audio: np.ndarray):
+        if self.always_apply:
+            return self.apply(audio)
+        else:
+            if np.random.rand() < self.probability:
+                return self.apply(audio)
+            else:
+                return audio
+
+    def apply(self, audio: np.ndarray):
+        raise NotImplementedError
 
 class NoiseInjectionTransform(AudioTransformBase):
     def __init__(self, always_apply=False, p=0.5, max_noise_level=0.5, sr=32000):
